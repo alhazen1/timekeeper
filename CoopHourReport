@@ -1,0 +1,164 @@
+//********************************************************************
+// CoopHourReport - Google App Script
+// display co-op hours worked from spreadsheet
+// David Wilson 4/18/2013
+// webmaster@xxxxxxxxxxxx.org
+//
+// 20130421 dw:
+// Moved flexTable into function getReport() (out of main doGet() )
+// now flexTable.clear() works as expected
+//********************************************************************
+
+// Spreadsheet key to Google Apps spreadsheet holding data
+// this will change if a different spreadsheet is used for data storage
+// look at URL in browser address bar to see spreadsheet key - copy / paste as needed
+var itemSpreadsheetKey = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+
+// Open the spreadsheet and get the sheet objects
+// Spreadsheet must match with sheet name exactly
+var openedSS = SpreadsheetApp.openById(itemSpreadsheetKey);
+var nameSheet = openedSS.getSheetByName("Pivot Table Family Names");
+var sourceSheet = openedSS.getSheetByName("Form Responses 1");
+
+function doGet() {
+  var app = UiApp.createApplication();
+  var panel = app.createVerticalPanel();
+  
+  
+  //********************************************************************
+  // FORM ELEMENTS  
+  //********************************************************************
+  
+  // list box pick family name ******************************************
+  var labelName = app.createLabel('Select Family Name');
+  
+  var listBoxName = app.createListBox().setWidth('200px').setName('name').setId('name');
+  numItemList1 = nameSheet.getLastRow()-1;//-1 is to exclude header row
+  //get the item array
+  list1ItemArray = nameSheet.getRange(2,1,numItemList1,1).getValues();
+  //Add the items in ListBox
+  for(var i=0; i<list1ItemArray.length; i++){
+    listBoxName.addItem(list1ItemArray[i][0])
+  }
+ 
+  // control buttons ******************************************
+  var buttonTimekeeper = app.createButton('Get Timekeeper Report').setId('timekeeper');  
+  var buttonClear = app.createButton('Clear').setId('clear'); //clear function not working!!!!
+  
+  // data table declared in function getReport(e) **********************
+  
+  
+  //********************************************************************
+  // DATA VALIDATION
+  //********************************************************************
+  // test for empty family name 
+  // handler for no family name selected - ERROR
+  // highlights invalid form element and disables submit button
+  var handlerInvalidName = app.createClientHandler().validateNotLength(listBoxName, 1, 60)
+    .forTargets(buttonTimekeeper).setEnabled(false)
+    .forTargets(listBoxName).setStyleAttribute("backgroundColor", "red");
+  listBoxName.addChangeHandler(handlerInvalidName);
+  
+
+  // handler if Name is not blank - VALID
+  // remove hightlighting once invalid form element corrected
+  var handlerValidName = app.createClientHandler().validateLength(listBoxName, 1, 60)
+    .forTargets(listBoxName).setStyleAttribute("backgroundColor", "white")
+    .forTargets(buttonTimekeeper).setEnabled(true);
+  listBoxName.addChangeHandler(handlerValidName); 
+  
+  //********************************************************************
+  // BUILD UI
+  //********************************************************************
+   
+  var gridMyGrid = app.createGrid(5,1).setId('myGrid');
+  
+  gridMyGrid.setWidget(0, 0, labelName)
+    .setWidget(1, 0, listBoxName)
+    .setWidget(2, 0, buttonTimekeeper);
+    //.setWidget(3, 0, flexTable);
+
+  
+  
+  //********************************************************************
+  // BUTTON FUNCTION
+  //********************************************************************
+  
+  var handlerReport = app.createServerClickHandler('getReport');
+  handlerReport.addCallbackElement(panel);
+  buttonTimekeeper.addClickHandler(handlerReport);
+  
+  panel.add(gridMyGrid);
+  app.add(panel);
+  return app;
+}
+
+//********************************************************************
+// creates data table of hours worked and inserts into UI
+//********************************************************************
+function getReport(e){
+  var app = UiApp.getActiveApplication();
+  var name = e.parameter.name;
+  var grid = app.getElementById('myGrid');
+
+  // table to hold report data ******************************************
+  var table = app.createFlexTable().setStyleAttribute('border', '1px solid black')
+    .setStyleAttribute('borderCollapse','collapse')
+    .setBorderWidth(1).clear(); //clears previous table, if any
+  //**************************************************************
+  
+  var totalHours = 0; // hold sum of hours worked
+  
+  //load array with table data
+  var dataArray = sourceSheet.getDataRange().getValues();
+  
+ //load column header row with bold type
+      for (var col = 1; col<dataArray[0].length; col++){
+        table.setText(0, col, dataArray[0][col].toString()).setStyleAttribute(0, col, 'fontWeight', 'bold');  
+      }
+  var count = 0; // for zebra stripe
+  
+  //**************************************************************
+  // BUILD TABLE
+  //Load data into table cells starting under column headings
+  //**************************************************************
+  for (var row = 1; row<dataArray.length; row++){  //outer for
+    //filter data by name selected
+    if( dataArray[row][1] == name){ //outer if
+      totalHours += dataArray[row][2]; //total hours
+      dataArray[row][4] = Utilities.formatDate(dataArray[row][4] ,Session.getTimeZone(),"yyyy-MM-dd");
+      count++; // for zebra stripe
+      
+      // Load data into table rows - start col 1 to lose the timestamp in col 0
+      for (var col = 1; col<dataArray[row].length; col++){ //inner for
+        //zebra stripe report odd rows
+        if( count % 2 == 1 ){  //inner if
+          table.setText(row, col, dataArray[row][col].toString()).setStyleAttribute(row, col, 'backgroundColor', '#E8E8E8') ;
+        }
+        else{
+        table.setText(row, col, dataArray[row][col].toString());
+        } //end inner if 
+      } //end inner for
+      
+    }  //end outer if
+  }  //end outer for
+  
+  // display total hours in bold 
+  table.setText(row+1,1, 'Total').setStyleAttribute(row+1,1, 'fontWeight', 'bold');
+  // test that total is number (blanks create NaN condition)
+  totalHours = parseFloat(totalHours); //try to convert to float
+  if( isNaN(totalHours) ) {
+    //do something?
+  } 
+  else {
+    table.setText(row+1,2, totalHours.toFixed(2)).setStyleAttribute(row+1,2, 'fontWeight', 'bold');
+  }
+  //**************************************************************
+  
+  // insert table into UI
+  grid.setWidget(3, 0, table);
+  
+  return app;
+}
+
+

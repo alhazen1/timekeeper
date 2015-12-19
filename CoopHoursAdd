@@ -1,0 +1,285 @@
+//********************************************************************
+// CoopHoursAdd - Google App Script
+// collect user input about co-op hours worked and saves to spreadsheet
+// David Wilson 4/18/2013
+// webmaster@thexxxxxxxxxxx.org
+// 20130424 dw: format date as yyymmdd, added some "labels" as defaults in listboxes 
+// and disabled submit until a real name and task was picked - no accidental wrong family name errors by user
+// Set dateBox to clear (create new dateBox) on press "clear"
+// Replace warning color to less harsh red
+// 20130425 dw: set a valid entry color of green on valid form cells
+//********************************************************************
+// 20150423 Session.getTimeZone() deprecated
+// changed to openedSS.getSpreadsheetTimeZone()
+//********************************************************************
+
+// Spreadsheet key to Google Apps spreadsheet holding data
+// this will change if a different spreadsheet is used for data storage
+// look at URL in browser address bar to see spreadsheet key - copy / paste as needed
+var itemSpreadsheetKey = 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
+
+//Open the spreadsheet and get the sheets
+var openedSS = SpreadsheetApp.openById(itemSpreadsheetKey);
+var sourceSheet = openedSS.getSheetByName("Pivot Table Family Names");
+var targetSheet = openedSS.getSheetByName("Form Responses 1");
+var jobSheet = openedSS.getSheetByName("Sheet Coop Jobs");
+
+function doGet() {
+  var app = UiApp.createApplication();
+  var panel = app.createVerticalPanel();
+  var invalidColor = "#FF8080";
+  var validColor = "#C2D699";
+  
+  //********************************************************************
+  // FORM ELEMENTS  
+  //********************************************************************
+  
+  // list box family names ******************************************
+  var labelName = app.createLabel('Family Name');
+  var labelNameWarning = app.createLabel('If your family name is not listed click ADD FAMILY NAME in left menu').setStyleAttribute("color", "#F00");
+
+  var listBoxName = app.createListBox().setWidth('200px').setName('name').setId('name');
+  numItemList1 = sourceSheet.getLastRow()-1;  //-1 is to exclude header row
+  //get the item array
+  list1ItemArray = sourceSheet.getRange(2,1,numItemList1,1).getValues();
+  
+  //Add the items in ListBox
+  listBoxName.addItem('Select Family Name');
+  for(var i=0; i<list1ItemArray.length; i++){
+    listBoxName.addItem(list1ItemArray[i][0])
+  }
+  
+  //list box coop jobs ******************************************
+  var labelJobs = app.createLabel('Select type of co-op work performed');
+  var listBoxJobs = app.createListBox().setWidth('200px').setName('jobs').setId('jobs');
+  numItemList2 = jobSheet.getLastRow()-1;   //-1 is to exclude header row
+  //get the item array
+  list2ItemArray = jobSheet.getRange(2,1,numItemList2,1).getValues();
+  
+  //Add the items into ListBox
+  listBoxJobs.addItem('Select Co-op Task');
+  for(var i=0; i<list2ItemArray.length; i++){
+    listBoxJobs.addItem(list2ItemArray[i][0])
+  }
+  
+  // box to get hours worked ******************************************
+  var labelHours = app.createLabel('Number of hours worked');
+  var textBoxHours = app.createTextBox().setWidth('40px').setName('hours').setId('hours');
+  
+  // date picker for date worked ******************************************
+  var labelDate = app.createLabel('Date co-op work performed'); 
+  var boxDate = app.createDateBox().setName('date').setId('date');
+  
+  // box to describe work done (if needed) ******************************************
+  var labelNotes = app.createLabel('Notes');
+  var textAreaNotes = app.createTextArea().setStyleAttribute("width", "400px").setStyleAttribute("height", "60px;")
+      .setName('notes').setId('notes');
+    
+  // control buttons ******************************************
+  // submit button disabled pending data validated
+  var buttonSubmit = app.createButton('Submit').setId('submit').setEnabled(false);
+  // clear button hidden until form submitted
+  var buttonClearForm = app.createButton('Clear Form').setVisible(false).setId('clear');
+
+  // alert that data entry was successful and to thank user ******************************************
+  var labelSuccess = app.createLabel('Your co-op hours have been logged.  Click CLEAR FORM to enter more.')
+    .setVisible(false).setId('success');
+  var labelThankYou = app.createLabel('The Co-op thanks you for your time.').setVisible(false).setId('thanks');
+
+
+  
+  //********************************************************************
+  // BUTTON FUNCTION
+  //********************************************************************
+  // submit button function
+  var handlerSubmit= app.createServerClickHandler('addCoopHours').addCallbackElement(panel);
+  buttonSubmit.addClickHandler(handlerSubmit);
+  
+  // clear button function
+  var handlerClear = app.createServerClickHandler('resetForm').addCallbackElement(panel);
+  buttonClearForm.addClickHandler(handlerClear);
+  
+  
+  //********************************************************************
+  // DATA VALIDATION
+  //********************************************************************
+  
+  
+  // handler for hours IS NOT number - ERROR
+  // highlights invalid form element and disables submit button
+  var handlerInvalidHours = app.createClientHandler().validateNotNumber(textBoxHours).forTargets(buttonSubmit).setEnabled(false)
+  .forTargets(textBoxHours).setStyleAttribute("backgroundColor", invalidColor);
+  textBoxHours.addKeyUpHandler(handlerInvalidHours);
+  
+  // handler for hours is a number - VALID
+  // remove hightlighting once invalid form element corrected
+  var handlerValidHours = app.createClientHandler().validateNumber(textBoxHours)
+  .forTargets(textBoxHours).setStyleAttribute("backgroundColor", validColor);
+  textBoxHours.addKeyUpHandler(handlerValidHours);
+  
+  // handler all input is valid -  hours is a number AND job / name is not default - ALL VALID
+  // submit button becomes enabled
+  var handlerValidInput = app.createClientHandler().validateNumber(textBoxHours)
+    .validateNotMatches(listBoxName,'Select Family Name')
+    .validateNotMatches(listBoxJobs,'Select Co-op Task')
+    .forTargets(buttonSubmit).setEnabled(true);
+  textBoxHours.addKeyUpHandler(handlerValidInput);
+  listBoxJobs.addChangeHandler(handlerValidInput);
+  listBoxName.addChangeHandler(handlerValidInput);
+  
+  
+  // handler for name default value selected - ERROR
+  // highlights invalid form element and disables submit button
+  var handlerInvalidName = app.createClientHandler()
+    .validateMatches(listBoxName,'Select Family Name')
+    .forTargets(buttonSubmit).setEnabled(false)
+    .forTargets(listBoxName).setStyleAttribute("backgroundColor", invalidColor);
+  listBoxName.addChangeHandler(handlerInvalidName);
+  
+  // handler if name is not default value - VALID
+  // remove hightlighting once invalid form element corrected
+  var handlerValidName = app.createClientHandler()
+    .validateNotMatches(listBoxName,'Select Family Name')
+    .forTargets(listBoxName).setStyleAttribute("backgroundColor", validColor);
+  
+  //listBoxJobs.addChangeHandler(handlerValidName);
+  listBoxName.addChangeHandler(handlerValidName);
+  
+  // handler for jobs default value selected - ERROR
+  // highlights invalid form element and disables submit button
+  var handlerInvalidJob = app.createClientHandler()
+    .validateMatches(listBoxJobs,'Select Co-op Task')
+    .forTargets(buttonSubmit).setEnabled(false)
+    .forTargets(listBoxJobs).setStyleAttribute("backgroundColor", invalidColor);
+  listBoxJobs.addChangeHandler(handlerInvalidJob);
+  
+  // handler if job is not default value - VALID
+  // remove hightlighting once invalid form element corrected
+  var handlerValidJob = app.createClientHandler()
+    .validateNotMatches(listBoxJobs,'Select Co-op Task')
+    .forTargets(listBoxJobs).setStyleAttribute("backgroundColor", validColor);
+  listBoxJobs.addChangeHandler(handlerValidJob);
+  
+  // handler if date box not empty - mostly to be same as other fields
+  // need to custom make handler function to check if date
+  var handlerValidDate = app.createClientHandler()
+    .forTargets(boxDate).setStyleAttribute("backgroundColor", validColor);
+  boxDate.addValueChangeHandler(handlerValidDate);
+  
+  /* OLD HANDLERS
+  // handler for hours IS NOT number - ERROR
+  // highlights invalid form element and disables submit button
+  var handlerInvalidHours = app.createClientHandler().validateNotNumber(textBoxHours).forTargets(buttonSubmit).setEnabled(false)
+  .forTargets(textBoxHours).setStyleAttribute("backgroundColor", invalidColor);
+  textBoxHours.addKeyUpHandler(handlerInvalidHours);
+  
+  // handler for hours is a number - VALID
+  // remove hightlighting once invalid form element corrected
+  var handlerValidHours = app.createClientHandler().validateNumber(textBoxHours)
+  .forTargets(textBoxHours).setStyleAttribute("backgroundColor", "white");
+  textBoxHours.addKeyUpHandler(handlerValidHours);
+  
+  // handler all input is valid -  hours is a number AND job is not blank - ALL VALID
+  // submit button becomes enabled
+  var handlerValidInput = app.createClientHandler().validateNumber(textBoxHours).validateLength(listBoxJobs, 1, 50)
+  .forTargets(buttonSubmit).setEnabled(true);
+  textBoxHours.addKeyUpHandler(handlerValidInput);
+  listBoxJobs.addChangeHandler(handlerValidInput);
+  
+  // handler for no job selected - ERROR
+  // highlights invalid form element and disables submit button
+  var handlerInvalidJob = app.createClientHandler().validateNotLength(listBoxJobs, 1, 60).forTargets(buttonSubmit).setEnabled(false)
+  .forTargets(listBoxJobs).setStyleAttribute("backgroundColor", invalidColor);
+  listBoxJobs.addChangeHandler(handlerInvalidJob);
+  
+  // handler if job is not blank - VALID
+  // remove hightlighting once invalid form element corrected
+  var handlerValidJob = app.createClientHandler().validateLength(listBoxJobs, 1, 60)
+  .forTargets(listBoxJobs).setStyleAttribute("backgroundColor", "white");
+  listBoxJobs.addChangeHandler(handlerValidJob); 
+  */
+  
+  //********************************************************************
+  // BUILD UI
+  //********************************************************************
+   
+  var gridMyGrid = app.createGrid(20,1).setId('myGrid');
+  
+  gridMyGrid.setWidget(0, 0, labelName)
+    .setWidget(1, 0, listBoxName)  //names box
+    .setWidget(2, 0, labelNameWarning)
+    .setWidget(4,0,labelHours) // hours box
+    .setWidget(5,0,textBoxHours)
+    .setWidget(7, 0, labelJobs)  //type of job drop down
+    .setWidget(8, 0, listBoxJobs)
+    .setWidget(10, 0, labelDate)  //date of work date picker
+    .setWidget(11, 0, boxDate)
+    .setWidget(13, 0, labelNotes) // area to explain further (if needed)
+    .setWidget(14, 0, textAreaNotes)
+    .setWidget(15, 0, buttonSubmit)  // control buttons
+    .setWidget(16,0,buttonClearForm)
+    .setWidget(17,0,labelThankYou) // indicates successful data entry on submit
+    .setWidget(18,0,labelSuccess);
+  
+  panel.add(gridMyGrid);
+  app.add(panel);
+  return app;
+}
+
+//********************************************************************
+// clear form on press CLEAR button
+//********************************************************************
+function resetForm(e){
+  var app = UiApp.getActiveApplication();
+  
+  // clear form elements
+  app.getElementById('hours').setValue('').setStyleAttribute("backgroundColor", "white");;
+  app.getElementById('notes').setText('');
+  //app.getElementById('date').setValue(new Date());
+  app.getElementById('jobs').setSelectedIndex(0).setStyleAttribute("backgroundColor", "white");
+  // creating new dateBox overwrites old - essentially "clears"
+  var boxDate = app.createDateBox().setName('date').setId('date');
+  app.getElementById('myGrid').setWidget(11, 0, boxDate);
+  
+  //turn off success message
+  app.getElementById('thanks').setVisible(false);
+  app.getElementById('success').setVisible(false); 
+  
+  app.getElementById('clear').setVisible(false); //hide clear button
+  
+  //show submit button but disabled pending data validation
+  app.getElementById('submit').setVisible(true).setEnabled(false); 
+  return app;
+}
+
+//********************************************************************
+// submits coop hours to report spreadsheet on press SUBMIT button
+//********************************************************************
+function addCoopHours(e){
+  var app = UiApp.getActiveApplication();
+  
+  // create local variables for clarity
+  var name = e.parameter.name;
+  var hours = e.parameter.hours;
+  var job = e.parameter.jobs;
+  
+  //var date = Utilities.formatDate(e.parameter.date,Session.getTimeZone(),"yyyy-MM-dd"); //Session.getTimeZone() deprecated
+  var date = Utilities.formatDate(e.parameter.date,openedSS.getSpreadsheetTimeZone(),"yyyy-MM-dd"); //simple date format only
+  var notes = e.parameter.notes;
+  
+  //var timeStamp = Utilities.formatDate(new Date(), "CST", "yyyy-MM-dd HH:mm:ss"); //create timestamp
+  var timeStamp = Utilities.formatDate(new Date(), openedSS.getSpreadsheetTimeZone(), "yyyy-MM-dd HH:mm:ss"); //create timestamp
+  
+  // write to spreadsheet at bottom below existing data
+  var lastRow = targetSheet.getLastRow();
+  var targetRange = targetSheet.getRange(lastRow+1, 1, 1, 6).setValues([[timeStamp,name,hours,job,date,notes]]); 
+  
+  // sets control buttons giving user choice to clear form
+  app.getElementById('clear').setVisible(true); //show clear button
+  app.getElementById('submit').setVisible(false); //hide submit button
+  
+  // notify user of successful data entry
+  app.getElementById('thanks').setVisible(true).setStyleAttribute('color','green');
+  app.getElementById('success').setVisible(true).setStyleAttribute('color','green');
+  return app;
+}

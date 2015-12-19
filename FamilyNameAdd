@@ -1,0 +1,136 @@
+//********************************************************************
+// FamilyNameAdd - Google App Script
+// collect user family name and saves to spreadsheet
+// David Wilson 4/18/2013
+// webmaster@xxxxxxxxxxxx.org
+//
+// 20130421 dw: error check duplicate name or blank name
+//********************************************************************
+
+// Spreadsheet key to Google Apps spreadsheet holding data
+// this will change if a different spreadsheet is used for data storage
+// look at URL in browser address bar to see spreadsheet key - copy / paste as needed
+var itemSpreadsheetKey = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+
+//Open the spreadsheet and get the sheet objects
+var openedSS = SpreadsheetApp.openById(itemSpreadsheetKey);
+var sheetSource = openedSS.getSheetByName("Pivot Table Family Names");//Spreadsheet must match with sheet name
+var sheetTarget = openedSS.getSheetByName("Sheet Family Names");
+var numItemList1 = sheetSource.getLastRow()-1;//-1 is to exclude header row
+var list1ItemArray = sheetSource.getRange(2,1,numItemList1,1).getValues();
+
+
+function doGet() {
+  var app = UiApp.createApplication();
+  var panel = app.createVerticalPanel();
+  var warnColor = "#FF8080";
+  
+  //********************************************************************
+  // FORM ELEMENTS  
+  //********************************************************************  
+  
+  // list box of existing family names **********************************
+  var labelName = app.createLabel('Check family names already on record');
+  var listBoxName = app.createListBox().setWidth('200px').setName('name').setId('name');
+  //numItemList1 = sheetSource.getLastRow()-1;//-1 is to exclude header row
+  //get the item array
+  //var list1ItemArray = sheetSource.getRange(2,1,numItemList1,1).getValues();
+  
+  //Add the items into ListBox
+  for(var i=0; i<list1ItemArray.length; i++){
+    listBoxName.addItem(list1ItemArray[i][0])
+  }
+  
+  // box to enter new family name ****************************************
+  var labelNameCheck = app.createLabel('If your family name is not on record then enter it below');
+  var labelNameDuplicate = app.createLabel('Name already exists in record').setStyleAttribute("color", warnColor).setVisible(false);
+  var textBoxEntry = app.createTextBox().setWidth('200px').setName('entry').setId('entry');
+  
+  // submit button ***************************************************
+  // disabled until user touches textBoxEntry
+  var buttonSubmit = app.createButton('Submit').setEnabled(false);
+  var labelSuccess = app.createLabel('Family added successfully.  You may now enter co-op hours.')
+      .setVisible(false).setId('success');
+
+
+  //********************************************************************
+  // DATA VALIDATION
+  //********************************************************************
+  // check for blank name  or duplicate name submission - handler order is important here!
+
+   // handler if name is already being used - ERROR
+   // highlights invalid form element and disables submit button
+   var handlerDuplicateName = app.createClientHandler().validateOptions( textBoxEntry, list1ItemArray)
+     .forTargets(buttonSubmit).setEnabled(false)
+     .forTargets(textBoxEntry).setStyleAttribute("backgroundColor", warnColor)
+     .forTargets(labelNameDuplicate).setVisible(true);
+   textBoxEntry.addKeyUpHandler(handlerDuplicateName);
+
+  // handler if name is not duplicate - VALID
+  // remove hightlighting once invalid form element corrected and enable submit button
+  var handlerNotDuplicateName = app.createClientHandler().validateNotOptions( textBoxEntry, list1ItemArray)
+     .forTargets(buttonSubmit).setEnabled(true)
+     .forTargets(textBoxEntry).setStyleAttribute("backgroundColor", "white")
+     .forTargets(labelNameDuplicate).setVisible(false);
+   textBoxEntry.addKeyUpHandler(handlerNotDuplicateName);
+    
+  
+  // handler for no family name entered - ERROR
+  // highlights invalid form element and disables submit button
+  var handlerInvalidName = app.createClientHandler().validateNotLength(textBoxEntry, 1, 60)
+    .forTargets(buttonSubmit).setEnabled(false)
+    .forTargets(textBoxEntry).setStyleAttribute("backgroundColor", warnColor);
+  textBoxEntry.addKeyUpHandler(handlerInvalidName);
+  
+  // handler if name is not blank - VALID
+  // remove hightlighting once invalid form element corrected and enable submit button
+  var handlerValidName = app.createClientHandler().validateLength(textBoxEntry, 1, 60)
+    .forTargets(textBoxEntry).setStyleAttribute("backgroundColor", "white")
+    .forTargets(buttonSubmit).setEnabled(true);
+  textBoxEntry.addKeyPressHandler(handlerValidName); 
+
+
+  //********************************************************************
+  // BUTTON FUNCTION
+  //********************************************************************
+  
+  var handler = app.createServerClickHandler('insertFamilyName');
+  handler.addCallbackElement(panel);
+  buttonSubmit.addClickHandler(handler);
+  
+  
+  //********************************************************************
+  // BUILD UI
+  //********************************************************************  
+  var gridMyGrid = app.createGrid(9,1);
+  
+  gridMyGrid.setWidget(0, 0, labelName)
+    .setWidget(1, 0, listBoxName)
+    .setWidget(3, 0, labelNameCheck)
+    .setWidget(4, 0, textBoxEntry)
+    .setWidget(5, 0, labelNameDuplicate)
+    .setWidget(7, 0, buttonSubmit)
+    .setWidget(8, 0, labelSuccess);
+  
+  panel.add(gridMyGrid);
+  app.add(panel);
+  return app;
+}
+
+
+//********************************************************************
+// submits family name to report spreadsheet on press SUBMIT button
+//********************************************************************
+function insertFamilyName(e){
+  var app = UiApp.getActiveApplication();
+  var name = e.parameter.entry;
+  
+  // show user success message
+  app.getElementById('success').setVisible(true).setStyleAttribute('color','green');
+  
+  // write to spreadsheet
+  var lastRow = sheetTarget.getLastRow();
+  var targetRange = sheetTarget.getRange(lastRow+1, 1).setValue([name]);
+  return app;
+}
+

@@ -1,0 +1,26 @@
+//********************************************************************
+// Co-op Hours Backup Script - Google App Script
+// backs up spreadsheet of co-op hours logged
+// David Wilson 5/1/2013
+// webmaster@xxxxxxxxxxxxxxx.org
+//
+// currently set for Monday and Thursday triggers after midnight
+// will email webmaster if there is a failure
+// 
+// as is also copies form - how to stop this???????
+//********************************************************************
+
+// Spreadsheet key to Google Apps spreadsheet holding data
+// this will change if a different spreadsheet is used for data storage
+// look at URL in browser address bar to see spreadsheet key - copy / paste as needed
+var itemSpreadsheetKey = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+var sourceFile = DocsList.getFileById(itemSpreadsheetKey);
+var timeStamp = Utilities.formatDate(new Date(), Session.getTimeZone(), "yyyy-MM-dd HH:mm");
+var targetFolder = DocsList.getFolder('Co-op Hours Backups');
+
+
+
+
+function doGet() {
+ sourceFile.makeCopy(sourceFile.getName() + " backup_" + timeStamp).addToFolder(targetFolder); 
+}
